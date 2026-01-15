@@ -1,0 +1,105 @@
+name: Publish to NPM
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  publish:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: ${{ secrets.NPM_REGISTRY_URL || 'https://registry.npmjs.org' }}
+
+      - name: Install pnpm
+        run: corepack enable
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Extract version from release tag
+        id: version
+        shell: bash
+        run: |
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          # Remove 'v' prefix if present (e.g., v0.1.16 -> 0.1.16)
+          VERSION="${TAG_NAME#v}"
+          # Validate version format (semver)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$ ]]; then
+            echo "Error: Invalid version format: $VERSION"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Update package version
+        run: |
+          cd packages/server
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+          echo "Updated package.json version to ${{ steps.version.outputs.version }}"
+
+      - name: Build package
+        run: pnpm build
+
+      - name: Configure npm registry authentication
+        run: |
+          if [ -n "${{ secrets.NPM_REGISTRY_URL }}" ]; then
+            # Custom registry - configure authentication
+            REGISTRY_URL="${{ secrets.NPM_REGISTRY_URL }}"
+            AUTH_TOKEN="${{ secrets.NPM_TOKEN }}"
+            
+            # Extract registry hostname (remove protocol)
+            REGISTRY_HOST=$(echo "$REGISTRY_URL" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+            
+            # Configure pnpm/npm registry
+            echo "//${REGISTRY_HOST}/:_authToken=${AUTH_TOKEN}" >> ~/.npmrc
+            echo "registry=${REGISTRY_URL}" >> ~/.npmrc
+            
+            echo "Configured authentication for custom registry: $REGISTRY_URL"
+          else
+            # Default npmjs.com - setup-node action handles this automatically
+            echo "Using default npmjs.com registry (configured via setup-node action)"
+          fi
+
+      - name: Publish to NPM
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd packages/server
+          
+          if [ -n "${{ secrets.NPM_REGISTRY_URL }}" ]; then
+            # Custom registry
+            echo "Publishing to custom registry: ${{ secrets.NPM_REGISTRY_URL }}"
+            pnpm publish --registry "${{ secrets.NPM_REGISTRY_URL }}" --no-git-checks
+          else
+            # Default npm registry
+            echo "Publishing to npmjs.com"
+            pnpm publish --no-git-checks
+          fi
