@@ -10,7 +10,7 @@
     "commitlint": "commitlint --edit",
     "format": "prettier --write \"**/*.{ts,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,json,md}\"",
-    "publish": "pnpm build && pnpm --filter paynet-sdk publish --registry https://packages.kozhukhar.dev"
+    "publish": "pnpm build && pnpm --filter paynet-sdk publish"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.3.1",

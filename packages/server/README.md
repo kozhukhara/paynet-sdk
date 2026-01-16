@@ -2,7 +2,7 @@
 
 TypeScript SDK for Paynet API v0.5. Server-side SDK for managing payment flows.
 
-**Note:** This SDK is based on Paynet API documentation. For official API specifications, refer to [paynet.md](paynet.md).
+**Note:** This SDK is based on Paynet API documentation. For official API specifications, refer to [paynet.md](https://paynet.md).
 
 > ⚠️ **Warning:** Some parts of this package were "vibe-coded" and may require additional review and testing.
 
